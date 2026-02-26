@@ -1,0 +1,12 @@
+/target
+**/*.rs.bk
+*.pdb
+.env
+.env.*
+*.log
+*.db
+nostr.db
+nostr-lmdb/
+
+# Internal
+AUDIT.md
