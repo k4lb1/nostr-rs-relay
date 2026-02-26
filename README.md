@@ -162,9 +162,12 @@ Proxy](docs/reverse-proxy.md).
 For development discussions, please feel free to use the [sourcehut
 mailing list](https://lists.sr.ht/~gheartsfield/nostr-rs-relay-devel).
 
-License
----
-This project is MIT licensed.
+## License
+
+MIT License. See [LICENSE](LICENSE).
+
+- Original work: Copyright (c) 2021 Greg Heartsfield
+- LMDB additions: Copyright (c) 2025 k4lb1
 
 External Documentation and Links
 ---
