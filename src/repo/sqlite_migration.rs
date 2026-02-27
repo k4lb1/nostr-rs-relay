@@ -1,5 +1,5 @@
 //! Database schema and migrations
-use crate::db::PooledConnection;
+use crate::repo::sqlite::PooledConnection;
 use crate::error::Result;
 use crate::event::{single_char_tagname, Event};
 use crate::utils::is_lower_hex;

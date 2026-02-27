@@ -6,25 +6,15 @@ use crate::event::Event;
 use crate::notice::Notice;
 use crate::payment::PaymentMessage;
 use crate::repo::lmdb::LmdbRepo;
-use crate::repo::postgres::{PostgresPool, PostgresRepo};
-use crate::repo::sqlite::SqliteRepo;
 use crate::repo::NostrRepo;
 use crate::server::NostrMetrics;
 use governor::clock::Clock;
 use governor::{Quota, RateLimiter};
-use log::LevelFilter;
 use nostr::key::PublicKey;
-use r2d2;
-use sqlx::pool::PoolOptions;
-use sqlx::postgres::PgConnectOptions;
-use sqlx::ConnectOptions;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tracing::{debug, info, trace, warn};
-
-pub type SqlitePool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
-pub type PooledConnection = r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>;
 
 /// Events submitted from a client, with a return channel for notices
 pub struct SubmittedEvent {
@@ -37,73 +27,19 @@ pub struct SubmittedEvent {
     pub user_balance: Option<u64>,
 }
 
-/// Build repo
+/// Build repo (LMDB only).
 /// # Panics
 ///
-/// Will panic if the pool could not be created.
+/// Panics if pay_to_relay is enabled (LMDB does not support it).
 pub async fn build_repo(settings: &Settings, metrics: NostrMetrics) -> Arc<dyn NostrRepo> {
-    match settings.database.engine.as_str() {
-        "sqlite" => Arc::new(build_sqlite_pool(settings, metrics).await),
-        "postgres" => Arc::new(build_postgres_pool(settings, metrics).await),
-        "lmdb" => {
-            if settings.pay_to_relay.enabled {
-                panic!(
-                    "LMDB engine does not support Pay-to-Relay. Disable pay_to_relay or use sqlite/postgres."
-                );
-            }
-            let repo = LmdbRepo::new(settings, metrics);
-            repo.start().await.ok();
-            Arc::new(repo)
-        }
-        _ => panic!("Unknown database engine: {}", settings.database.engine),
+    if settings.pay_to_relay.enabled {
+        panic!(
+            "LMDB engine does not support Pay-to-Relay. Disable pay_to_relay in config."
+        );
     }
-}
-
-async fn build_sqlite_pool(settings: &Settings, metrics: NostrMetrics) -> SqliteRepo {
-    let repo = SqliteRepo::new(settings, metrics);
+    let repo = LmdbRepo::new(settings, metrics);
     repo.start().await.ok();
-    repo.migrate_up().await.ok();
-    repo
-}
-
-async fn build_postgres_pool(settings: &Settings, metrics: NostrMetrics) -> PostgresRepo {
-    let mut options: PgConnectOptions = settings.database.connection.as_str().parse().unwrap();
-    options.log_statements(LevelFilter::Debug);
-    options.log_slow_statements(LevelFilter::Warn, Duration::from_secs(60));
-
-    let pool: PostgresPool = PoolOptions::new()
-        .max_connections(settings.database.max_conn)
-        .min_connections(settings.database.min_conn)
-        .idle_timeout(Duration::from_secs(60))
-        .connect_with(options)
-        .await
-        .unwrap();
-
-    let write_pool: PostgresPool = match &settings.database.connection_write {
-        Some(cfg_write) => {
-            let mut options_write: PgConnectOptions = cfg_write.as_str().parse().unwrap();
-            options_write.log_statements(LevelFilter::Debug);
-            options_write.log_slow_statements(LevelFilter::Warn, Duration::from_secs(60));
-
-            PoolOptions::new()
-                .max_connections(settings.database.max_conn)
-                .min_connections(settings.database.min_conn)
-                .idle_timeout(Duration::from_secs(60))
-                .connect_with(options_write)
-                .await
-                .unwrap()
-        }
-        None => pool.clone(),
-    };
-
-    let repo = PostgresRepo::new(pool, write_pool, metrics);
-
-    // Panic on migration failure
-    let version = repo.migrate_up().await.unwrap();
-    info!("Postgres migration completed, at v{}", version);
-    // startup scheduled tasks
-    repo.start().await.ok();
-    repo
+    Arc::new(repo)
 }
 
 /// Spawn a database writer that persists events to the `SQLite` store.
