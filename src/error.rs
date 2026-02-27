@@ -84,6 +84,9 @@ pub enum Error {
     HTTPError(http::Error),
     #[error("Unknown/Undocumented")]
     UnknownError,
+    /// LMDB backend does not support Pay-to-Relay or NIP-05 verification
+    #[error("LMDB does not support Pay-to-Relay / NIP-05. Planned for future release.")]
+    LmdbUnsupported,
 }
 
 impl From<hex::FromHexError> for Error {

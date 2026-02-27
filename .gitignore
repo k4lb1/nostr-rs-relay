@@ -11,3 +11,4 @@ nostr-lmdb/
 # Internal
 AUDIT.md
 .cursor/project_context.md
+data/

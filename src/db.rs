@@ -42,7 +42,7 @@ pub async fn build_repo(settings: &Settings, metrics: NostrMetrics) -> Arc<dyn N
     Arc::new(repo)
 }
 
-/// Spawn a database writer that persists events to the `SQLite` store.
+/// Spawn a database writer that persists events to the database store.
 pub async fn db_writer(
     repo: Arc<dyn NostrRepo>,
     settings: Settings,

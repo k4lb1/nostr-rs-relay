@@ -8,7 +8,7 @@ use crate::repo::postgres_migration::run_migrations;
 use crate::repo::{now_jitter, NostrRepo};
 use crate::server::NostrMetrics;
 use crate::subscription::{ReqFilter, Subscription, TagOperand};
-use crate::utils::{self, is_hex, is_lower_hex};
+use crate::utils::{self, is_64_hex, is_hex, is_lower_hex};
 use futures::stream::StreamExt;
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
@@ -246,7 +246,7 @@ ON CONFLICT (id) DO NOTHING"#,
             let event_candidates = e.tag_values_by_name("e");
             let pub_keys: Vec<Vec<u8>> = event_candidates
                 .iter()
-                .filter(|x| is_hex(x) && x.len() == 64)
+                .filter(|x| is_64_hex(x))
                 .filter_map(|x| hex::decode(x).ok())
                 .collect();
 

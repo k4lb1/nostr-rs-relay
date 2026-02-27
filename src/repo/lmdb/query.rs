@@ -23,6 +23,7 @@ pub fn run_query(
     index_kind: &IndexDb,
     index_tag: &IndexDb,
     _index_created: &IndexDb,
+    search_index: Option<&super::search::SearchIndex>,
     txn: &RoTxn<'_>,
     filters: &[ReqFilter],
     sub_id: &str,
@@ -32,8 +33,42 @@ pub fn run_query(
         if filter.force_no_match {
             continue;
         }
-        if filter.search.is_some() {
-            tracing::debug!("LMDB: skipping search filter (NIP-50 not yet implemented)");
+        if let Some(ref search_term) = filter.search {
+            if let Some(si) = search_index {
+                let limit = filter.limit.unwrap_or(DEFAULT_LIMIT).min(1000) as usize;
+                if let Ok(ids) = si.search(search_term, limit) {
+                    let since = filter.since.unwrap_or(0);
+                    let until = filter.until.unwrap_or(u64::MAX);
+                    for hash in ids {
+                        if let Ok(Some(json)) = events.get(txn, &hash) {
+                            if let Ok(ev) = serde_json::from_slice::<Event>(&json) {
+                                if ev.created_at >= since && ev.created_at <= until {
+                                    if let Some(ks) = &filter.kinds {
+                                        if !ks.contains(&ev.kind) {
+                                            continue;
+                                        }
+                                    }
+                                    if let Some(authors) = &filter.authors {
+                                        if !authors.iter().any(|a| ev.pubkey.starts_with(a)) {
+                                            continue;
+                                        }
+                                    }
+                                    let s = String::from_utf8_lossy(&json);
+                                    if query_tx.blocking_send(QueryResult {
+                                        sub_id: sub_id.to_string(),
+                                        event: s.to_string(),
+                                    }).is_err()
+                                    {
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            tracing::debug!("LMDB: skipping search filter (no search index)");
             continue;
         }
         let limit = filter.limit.unwrap_or(DEFAULT_LIMIT).min(1000);

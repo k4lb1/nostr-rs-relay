@@ -4,6 +4,7 @@
 mod error;
 mod query;
 mod schema;
+mod search;
 
 use crate::config::Settings;
 use crate::db::QueryResult;
@@ -29,7 +30,6 @@ use tokio::task;
 use tracing::{debug, info};
 
 const DEFAULT_MAP_SIZE: usize = 10 * 1024 * 1024 * 1024; // 10GB
-const LMDB_UNSUPPORTED: &str = "LMDB does not support Pay-to-Relay / NIP-05. Planned for future release.";
 
 fn map_lmdb_err(e: LmdbError) -> crate::error::Error {
     crate::error::Error::CustomError(e.to_string())
@@ -43,6 +43,7 @@ pub struct LmdbEnv {
     index_kind: Database<SerdeBincode<Vec<u8>>, Unit>,
     index_tag: Database<SerdeBincode<Vec<u8>>, Unit>,
     index_created: Database<SerdeBincode<Vec<u8>>, Unit>,
+    search_index: Option<Arc<search::SearchIndex>>,
 }
 
 impl LmdbEnv {
@@ -73,6 +74,8 @@ impl LmdbEnv {
             .create_database(&mut wtxn, Some(INDEX_CREATED_DB))
             .map_err(|e| map_lmdb_err(LmdbError::Heed(e)))?;
         wtxn.commit().map_err(|e| map_lmdb_err(LmdbError::Heed(e)))?;
+        let search_path = path.join("search");
+        let search_index = search::SearchIndex::open(&search_path).ok().map(Arc::new);
         info!("LMDB opened at {:?} (map_size={}GB)", path, map_size / (1024 * 1024 * 1024));
         Ok(Self {
             env: Arc::new(env),
@@ -81,6 +84,7 @@ impl LmdbEnv {
             index_kind,
             index_tag,
             index_created,
+            search_index,
         })
     }
 
@@ -134,6 +138,9 @@ impl LmdbEnv {
         }
 
         wtxn.commit().map_err(|e| map_lmdb_err(LmdbError::Heed(e)))?;
+        if let Some(ref si) = self.search_index {
+            let _ = si.add_document(&hash, e);
+        }
         debug!("LMDB: wrote event {}", e.get_event_id_prefix());
         Ok(1)
     }
@@ -173,6 +180,9 @@ impl LmdbEnv {
                 }
             }
         }
+        if let Some(ref si) = self.search_index {
+            let _ = si.delete_document(event_id);
+        }
         Ok(())
     }
 
@@ -200,8 +210,11 @@ impl LmdbEnv {
     }
 }
 
-fn get_lmdb_map_size(_settings: &Settings) -> usize {
-    DEFAULT_MAP_SIZE
+fn get_lmdb_map_size(settings: &Settings) -> usize {
+    settings
+        .database
+        .lmdb_map_size
+        .unwrap_or(DEFAULT_MAP_SIZE)
 }
 
 #[derive(Clone)]
@@ -275,6 +288,7 @@ impl NostrRepo for LmdbRepo {
                 &env.index_kind,
                 &env.index_tag,
                 &env.index_created,
+                env.search_index.as_deref(),
                 &rtxn,
                 &filters,
                 &sub_id,
@@ -289,60 +303,73 @@ impl NostrRepo for LmdbRepo {
         Ok(())
     }
 
+    /// NIP-05: LMDB has no user_verification table. Use sqlite/postgres for verified users.
     async fn create_verification_record(&self, _event_id: &str, _name: &str) -> Result<()> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// NIP-05: LMDB has no user_verification table.
     async fn update_verification_timestamp(&self, _id: u64) -> Result<()> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// NIP-05: LMDB has no user_verification table.
     async fn fail_verification(&self, _id: u64) -> Result<()> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// NIP-05: LMDB has no user_verification table.
     async fn delete_verification(&self, _id: u64) -> Result<()> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// NIP-05: LMDB has no user_verification table. Disable verified_users in config.
     async fn get_latest_user_verification(&self, _pub_key: &str) -> Result<VerificationRecord> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// NIP-05: LMDB has no user_verification table.
     async fn get_oldest_user_verification(&self, _before: u64) -> Result<VerificationRecord> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// Pay-to-Relay: LMDB has no account table. Disable pay_to_relay in config.
     async fn create_account(&self, _pubkey: &str) -> Result<bool> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// Pay-to-Relay: LMDB has no account table.
     async fn admit_account(&self, _pubkey: &str, _admission_cost: u64) -> Result<()> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// Pay-to-Relay: LMDB has no account table.
     async fn get_account_balance(&self, _pubkey: &str) -> Result<(bool, u64)> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// Pay-to-Relay: LMDB has no account table.
     async fn update_account_balance(
         &self,
         _pubkey: &str,
         _positive: bool,
         _new_balance: u64,
     ) -> Result<()> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// Pay-to-Relay: LMDB has no invoice table.
     async fn create_invoice_record(&self, _pubkey: &str, _invoice_info: InvoiceInfo) -> Result<()> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// Pay-to-Relay: LMDB has no invoice table.
     async fn update_invoice(&self, _payment_hash: &str, _status: InvoiceStatus) -> Result<String> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 
+    /// Pay-to-Relay: LMDB has no invoice table.
     async fn get_unpaid_invoice(&self, _pubkey: &str) -> Result<Option<InvoiceInfo>> {
-        Err(crate::error::Error::CustomError(LMDB_UNSUPPORTED.to_string()))
+        Err(crate::error::Error::LmdbUnsupported)
     }
 }

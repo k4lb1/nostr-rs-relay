@@ -50,6 +50,9 @@ impl NipHandler for Nip05Handler {
             ) => Ok(NipHandlerResult::Reject {
                 reason: "NIP-05 verification needed to publish events".to_string(),
             }),
+            Err(Error::LmdbUnsupported) => Ok(NipHandlerResult::Reject {
+                reason: "NIP-05 verification not supported (LMDB backend)".to_string(),
+            }),
             Err(e) => Ok(NipHandlerResult::Reject {
                 reason: format!("verification check failed: {e}"),
             }),

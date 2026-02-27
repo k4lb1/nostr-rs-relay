@@ -17,6 +17,12 @@ pub fn is_hex(s: &str) -> bool {
     s.chars().all(|x| char::is_ascii_hexdigit(&x))
 }
 
+/// Check if string is 64 hex characters (e.g. event id, pubkey).
+#[must_use]
+pub fn is_64_hex(s: &str) -> bool {
+    is_hex(s) && s.len() == 64
+}
+
 /// Check if string is a nip19 string (npub or note prefix).
 #[cfg(test)]
 pub fn is_nip19(s: &str) -> bool {

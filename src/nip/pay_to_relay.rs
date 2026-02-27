@@ -59,6 +59,9 @@ impl NipHandler for PayToRelayHandler {
                 }
                 Ok(NipHandlerResult::AcceptWithBalance(balance))
             }
+            Err(Error::LmdbUnsupported) => Ok(NipHandlerResult::Reject {
+                reason: "Pay-to-Relay not supported (LMDB backend)".to_string(),
+            }),
             Err(
                 Error::SqlError(rusqlite::Error::QueryReturnedNoRows)
                 | Error::SqlxError(sqlx::Error::RowNotFound),

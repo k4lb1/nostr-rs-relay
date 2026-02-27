@@ -59,6 +59,7 @@ log = "0.4"
 cln-rpc = "0.1.9"
 itertools = "0.14.0"
 heed = { version = "0.22", features = ["serde"] }
+tantivy = "0.22"
 
 [target.'cfg(all(not(target_env = "msvc"), not(target_os = "openbsd")))'.dependencies]
 tikv-jemallocator = "0.5"

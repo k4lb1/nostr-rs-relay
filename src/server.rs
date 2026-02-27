@@ -845,7 +845,7 @@ pub fn start_server(settings: &Settings, shutdown_rx: MpscReceiver<()>) -> Resul
             let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
             format!("tokio-ws-{id}")
         })
-        // limit concurrent SQLite blocking threads
+        // limit concurrent blocking threads (LMDB, etc.)
         .max_blocking_threads(settings.limits.max_blocking_threads)
         .on_thread_start(|| {
             trace!("started new thread: {:?}", std::thread::current().name());

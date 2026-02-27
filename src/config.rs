@@ -30,6 +30,9 @@ pub struct Database {
     /// Path for LMDB when engine = "lmdb" (default: ./nostr-lmdb)
     #[serde(default)]
     pub lmdb_path: Option<String>,
+    /// LMDB map size in bytes (default: 10GB). Reserve virtual address space for growth.
+    #[serde(default)]
+    pub lmdb_map_size: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -332,6 +335,7 @@ impl Default for Settings {
                 connection: "".to_owned(),
                 connection_write: None,
                 lmdb_path: Some("./nostr-lmdb".to_owned()),
+                lmdb_map_size: None,
             },
             grpc: Grpc {
                 event_admission_server: None,

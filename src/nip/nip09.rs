@@ -3,15 +3,11 @@
 use super::{NipContext, NipHandler, NipHandlerResult};
 use crate::error::Result;
 use crate::event::Event;
-use crate::utils::is_hex;
+use crate::utils::is_64_hex;
 use async_trait::async_trait;
 
 /// NIP-09: Event deletion. Kind 5 must have at least one valid "e" tag (hex, 64 chars).
 pub struct Nip09Handler;
-
-fn is_64_hex(s: &str) -> bool {
-    is_hex(s) && s.len() == 64
-}
 
 impl Nip09Handler {
     #[must_use]

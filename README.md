@@ -1,19 +1,36 @@
 # nostr-rs-relay (LMDB fork)
 
-Fork of [nostr-rs-relay](https://git.sr.ht/~gheartsfield/nostr-rs-relay) by Greg Heartsfield.
-Adds an optional LMDB storage engine for higher read performance.
+Fork of [nostr-rs-relay](https://git.sr.ht/~gheartsfield/nostr-rs-relay) by Greg Heartsfield. Replaces SQLite/PostgreSQL with LMDB for event storage.
 
 Upstream: [sourcehut](https://sr.ht/~gheartsfield/nostr-rs-relay/) | [GitHub mirror](https://github.com/scsibug/nostr-rs-relay)
 
 ---
 
-This is a [nostr](https://github.com/nostr-protocol/nostr) relay written in Rust.
-It supports SQLite (default), PostgreSQL (experimental), and LMDB.
+## 🔄 What changed vs original
 
+| Original | This fork |
+|----------|-----------|
+| SQLite (default) or PostgreSQL | LMDB only for relay runtime |
+| NIP-50 via SQLite FTS5 | NIP-50 via tantivy (full-text search) |
+| Pay-to-Relay and NIP-05 supported | Not supported (returns `Error::LmdbUnsupported`) |
+| `build_repo` chooses engine | `build_repo` always uses LMDB |
+| `event` + `tag` SQL tables | heed/LMDB: `events` + indices (author, kind, tag, created) |
+| Migrations (SQL) | No migrations (LMDB schema is fixed) |
+| bulkloader writes to SQLite | bulkloader still writes to SQLite (unchanged) |
 
-## Features
+New config options: `lmdb_path`, `lmdb_map_size` (default 10GB).
 
-[NIPs](https://github.com/nostr-protocol/nips) with a relay-specific implementation are listed here.
+---
+
+## ⚠️ Disclaimer
+
+This fork was developed with AI-assisted tooling. The author's primary background is web development; Rust/relay logic was written with help and may contain bugs. It theoretically works as intended, but there is no warranty. Use at your own risk. Production use should be preceded by thorough testing.
+
+---
+
+## ✨ Features
+
+[NIPs](https://github.com/nostr-protocol/nips) with a relay-specific implementation:
 
 - [x] NIP-01: [Basic protocol flow description](https://github.com/nostr-protocol/nips/blob/master/01.md)
   * Core event model
@@ -29,21 +46,22 @@ It supports SQLite (default), PostgreSQL (experimental), and LMDB.
 - [x] NIP-16: [Event Treatment](https://github.com/nostr-protocol/nips/blob/master/16.md)
 - [x] NIP-20: [Command Results](https://github.com/nostr-protocol/nips/blob/master/20.md)
 - [x] NIP-22: [Event `created_at` limits](https://github.com/nostr-protocol/nips/blob/master/22.md) (_future-dated events only_)
-- [ ] NIP-26: [Event Delegation](https://github.com/nostr-protocol/nips/blob/master/26.md) (_implemented, but currently disabled_)
+- [x] NIP-26: [Event Delegation](https://github.com/nostr-protocol/nips/blob/master/26.md)
 - [x] NIP-28: [Public Chat](https://github.com/nostr-protocol/nips/blob/master/28.md)
 - [x] NIP-33: [Parameterized Replaceable Events](https://github.com/nostr-protocol/nips/blob/master/33.md)
 - [x] NIP-40: [Expiration Timestamp](https://github.com/nostr-protocol/nips/blob/master/40.md)
 - [x] NIP-42: [Authentication of clients to relays](https://github.com/nostr-protocol/nips/blob/master/42.md)
+- [x] NIP-50: [Search Capability](https://github.com/nostr-protocol/nips/blob/master/50.md) (tantivy, indexes event content)
+- [x] NIP-56: [Reporting](https://github.com/nostr-protocol/nips/blob/master/56.md) (kind 1984)
+- [x] NIP-65: [Relay List Metadata](https://github.com/nostr-protocol/nips/blob/master/65.md) (kind 10002)
 
-## Quick Start
+---
 
-The provided `Dockerfile` will compile and build the server
-application.  Use a bind mount to store the SQLite database outside of
-the container image, and map the container's 8080 port to a host port
-(7000 in the example below).
+## 🚀 Quick Start
 
-The examples below start a rootless podman container, mapping a local
-data directory and config file.
+The provided `Dockerfile` will compile and build the server application. Use a bind mount to store the LMDB database outside of the container image.
+
+Add `lmdb_path = "./db/nostr-lmdb"` to `[database]` in your config to persist data.
 
 ```console
 $ podman build --pull -t nostr-rs-relay .
@@ -57,50 +75,27 @@ $ podman run -it --rm -p 7000:8080 \
   -v $(pwd)/data:/usr/src/app/db:Z \
   -v $(pwd)/config.toml:/usr/src/app/config.toml:ro,Z \
   --name nostr-relay nostr-rs-relay:latest
-
-Nov 19 15:31:15.013  INFO nostr_rs_relay: Starting up from main
-Nov 19 15:31:15.017  INFO nostr_rs_relay::server: listening on: 0.0.0.0:8080
-Nov 19 15:31:15.019  INFO nostr_rs_relay::server: db writer created
-Nov 19 15:31:15.019  INFO nostr_rs_relay::server: control message listener started
-Nov 19 15:31:15.019  INFO nostr_rs_relay::db: Built a connection pool "event writer" (min=1, max=4)
-Nov 19 15:31:15.019  INFO nostr_rs_relay::db: opened database "/usr/src/app/db/nostr.db" for writing
-Nov 19 15:31:15.019  INFO nostr_rs_relay::schema: DB version = 0
-Nov 19 15:31:15.054  INFO nostr_rs_relay::schema: database pragma/schema initialized to v7, and ready
-Nov 19 15:31:15.054  INFO nostr_rs_relay::schema: All migration scripts completed successfully.  Welcome to v7.
-Nov 19 15:31:15.521  INFO nostr_rs_relay::db: Built a connection pool "client query" (min=4, max=128)
 ```
 
-Use a `nostr` client such as
-[`noscl`](https://github.com/fiatjaf/noscl) to publish and query
-events.
+Use a nostr client such as [`noscl`](https://github.com/fiatjaf/noscl) to publish and query events.
 
-```console
-$ noscl publish "hello world"
-Sent to 'ws://localhost:8090'.
-Seen it on 'ws://localhost:8090'.
-$ noscl home
-Text Note [81cf...2652] from 296a...9b92 5 seconds ago
-  hello world
-```
+A pre-built upstream container is available on DockerHub: https://hub.docker.com/r/scsibug/nostr-rs-relay
 
-A pre-built container is also available on DockerHub:
-https://hub.docker.com/r/scsibug/nostr-rs-relay
+---
 
-## Build and Run (without Docker)
+## 🔧 Build and Run (without Docker)
 
-Building `nostr-rs-relay` requires an installation of Cargo & Rust: https://www.rust-lang.org/tools/install
+Requires Cargo & Rust: https://www.rust-lang.org/tools/install
 
-The following OS packages will be helpful; on Debian/Ubuntu:
+Debian/Ubuntu:
 ```console
 $ sudo apt-get install build-essential cmake protobuf-compiler pkg-config libssl-dev
 ```
 
-On OpenBSD:
+OpenBSD:
 ```console
 $ doas pkg_add rust protobuf
 ```
-
-Clone this fork (or the upstream), then build:
 
 ```console
 $ git clone -q https://github.com/k4lb1/nostr-rs-relay
@@ -108,68 +103,73 @@ $ cd nostr-rs-relay
 $ cargo build -q -r
 ```
 
-The relay executable is now located in
-`target/release/nostr-rs-relay`.  In order to run it with logging
-enabled, execute it with the `RUST_LOG` variable set:
-
 ```console
 $ RUST_LOG=warn,nostr_rs_relay=info ./target/release/nostr-rs-relay
-Dec 26 10:31:56.455  INFO nostr_rs_relay: Starting up from main
-Dec 26 10:31:56.464  INFO nostr_rs_relay::server: listening on: 0.0.0.0:8080
-Dec 26 10:31:56.466  INFO nostr_rs_relay::server: db writer created
-Dec 26 10:31:56.466  INFO nostr_rs_relay::db: Built a connection pool "event writer" (min=1, max=2)
-Dec 26 10:31:56.466  INFO nostr_rs_relay::db: opened database "./nostr.db" for writing
-Dec 26 10:31:56.466  INFO nostr_rs_relay::schema: DB version = 11
-Dec 26 10:31:56.467  INFO nostr_rs_relay::db: Built a connection pool "maintenance writer" (min=1, max=2)
-Dec 26 10:31:56.467  INFO nostr_rs_relay::server: control message listener started
-Dec 26 10:31:56.468  INFO nostr_rs_relay::db: Built a connection pool "client query" (min=4, max=8)
 ```
 
-You now have a running relay, on port `8080`.  Use a `nostr` client or
-`websocat` to connect and send/query for events.
+The relay listens on port `8080` by default.
 
-## LMDB
+---
 
-Set `engine = "lmdb"` in `[database]` to use LMDB. Requires `pay_to_relay.enabled = false`.
-Not supported: NIP-05 verification, Pay-to-Relay, tag queries, NIP-50 search.
-Data path defaults to `./nostr-lmdb` (config key: `lmdb_path`).
+## 💾 LMDB Storage
 
-## Configuration
+Event storage uses LMDB only. Default path: `./nostr-lmdb` (config: `lmdb_path`). Optional: `lmdb_map_size` (bytes, default 10GB).
 
-The sample [`config.toml`](config.toml) file demonstrates the
-configuration available to the relay.  This file is optional, but may
-be mounted into a docker container like so:
+Supported: NIP-09 (deletion), NIP-12 (tag queries), NIP-50 (full-text search via tantivy).
+
+Not supported: NIP-05 verification, Pay-to-Relay. Requires `pay_to_relay.enabled = false` (otherwise the relay panics at startup).
+
+---
+
+## 📌 Still open / TODO
+
+- Pay-to-Relay and NIP-05: not implemented for LMDB (would need account/invoice storage)
+- bulkloader: still writes to SQLite; no LMDB bulk import path yet
+- NIP-50 search index: created on first run; existing events are not backfilled
+- Dead code: `SqliteStorage`, `PostgresStorage` removed; `repo::sqlite` and `repo::postgres` kept for bulkloader and tests
+
+---
+
+## 🧪 Needs testing
+
+- [ ] Integration tests with LMDB (e.g. `start_and_stop`)
+- [ ] NIP-50 search under load (tantivy commit frequency, performance)
+- [ ] NIP-09 deletion with many events
+- [ ] Large datasets (map_size behaviour, disk growth)
+- [ ] Concurrent subscriptions and write load
+- [ ] Migration path from SQLite (if anyone needs it)
+
+---
+
+## ⚙️ Configuration
+
+Sample [`config.toml`](config.toml) shows available options. You can mount it into a container:
 
 ```console
 $ docker run -it -p 7000:8080 \
   --mount src=$(pwd)/config.toml,target=/usr/src/app/config.toml,type=bind \
   --mount src=$(pwd)/data,target=/usr/src/app/db,type=bind \
-  --mount src=$(pwd)/index.html,target=/usr/src/app/index.html,type=bind \
   nostr-rs-relay
 ```
 
-Options include rate-limiting, event size limits, and network address
-settings.
+---
 
-## Reverse Proxy Configuration
+## 🌐 Reverse Proxy
 
-For examples of putting the relay behind a reverse proxy (for TLS
-termination, load balancing, and other features), see [Reverse
-Proxy](docs/reverse-proxy.md).
+For TLS, load balancing, etc., see [Reverse Proxy](docs/reverse-proxy.md).
 
-## Dev Channel
+---
 
-For development discussions, please feel free to use the [sourcehut
-mailing list](https://lists.sr.ht/~gheartsfield/nostr-rs-relay-devel).
-
-## License
+## 📄 License
 
 MIT License. See [LICENSE](LICENSE).
 
-- Original work: Copyright (c) 2021 Greg Heartsfield
-- LMDB additions: Copyright (c) 2025 k4lb1
+- Original nostr-rs-relay: Copyright (c) 2021 Greg Heartsfield
+- LMDB fork changes: Copyright (c) 2025 k4lb1
 
-External Documentation and Links
 ---
 
-* [BlockChainCaffe's Nostr Relay Setup Guide](https://github.com/BlockChainCaffe/Nostr-Relay-Setup-Guide)
+## 🔗 Links
+
+- [BlockChainCaffe's Nostr Relay Setup Guide](https://github.com/BlockChainCaffe/Nostr-Relay-Setup-Guide)
+- [sourcehut mailing list](https://lists.sr.ht/~gheartsfield/nostr-rs-relay-devel) (upstream dev)

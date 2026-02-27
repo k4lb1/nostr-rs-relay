@@ -19,4 +19,3 @@ pub mod utils;
 // Public API for creating relays programmatically
 pub mod payment;
 pub mod server;
-pub mod storage;

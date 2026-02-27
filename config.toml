@@ -31,37 +31,31 @@ description = "A newly created nostr-rs-relay.\n\nCustomize this with your own i
 #tracing = false
 
 [database]
-# Database engine (sqlite/postgres).  Defaults to sqlite.
-# Support for postgres is currently experimental.
-#engine = "sqlite"
+# This LMDB fork uses LMDB only for relay runtime. sqlite/postgres are
+# used by bulkloader and tests only.
+#engine = "lmdb"
 
-# Directory for SQLite files.  Defaults to the current directory.  Can
-# also be specified (and overriden) with the "--db dirname" command
-# line option.
+# Directory for SQLite (bulkloader). LMDB uses lmdb_path below.
 #data_directory = "."
 
-# Use an in-memory database instead of 'nostr.db'.
-# Requires sqlite engine.
-# Caution; this will not survive a process restart!
+# Use an in-memory database (bulkloader only). Ignored by LMDB.
 #in_memory = false
 
-# Database connection pool settings for subscribers:
-
-# Minimum number of SQLite reader connections
+# Connection pool (sqlite/postgres only). Ignored by LMDB.
 #min_conn = 0
-
-# Maximum number of SQLite reader connections.  Recommend setting this
-# to approx the number of cores.
 #max_conn = 8
 
-# Database connection string.  Required for postgres; not used for
-# sqlite.
+# Postgres connection (bulkloader). Not used by LMDB relay.
 #connection = "postgresql://postgres:nostr@localhost:7500/nostr"
 
 # Optional database connection string for writing.  Use this for
 # postgres clusters where you want to separate reads and writes to
 # different nodes.  Ignore for single-database instances.
 #connection_write = "postgresql://postgres:nostr@localhost:7500/nostr"
+
+# LMDB path and map size (relay storage).
+#lmdb_path = "./nostr-lmdb"
+#lmdb_map_size = 10737418240  # 10GB in bytes; reserve virtual address space for growth
 
 [logging]
 # Directory to store log files.  Log files roll over daily.

@@ -8,7 +8,7 @@ use crate::payment::{InvoiceInfo, InvoiceStatus};
 use crate::repo::sqlite_migration::{upgrade_db, STARTUP_SQL};
 use crate::server::NostrMetrics;
 use crate::subscription::{ReqFilter, Subscription, TagOperand};
-use crate::utils::{is_hex, unix_time};
+use crate::utils::{is_64_hex, unix_time};
 use async_trait::async_trait;
 use hex;
 use itertools::Itertools;
@@ -203,7 +203,7 @@ impl SqliteRepo {
             let mut params: Vec<Box<dyn ToSql>> = vec![Box::new(hex::decode(&e.pubkey)?)];
             event_candidates
                 .iter()
-                .filter(|x| is_hex(x) && x.len() == 64)
+                .filter(|x| is_64_hex(x))
                 .filter_map(|x| hex::decode(x).ok())
                 .for_each(|x| params.push(Box::new(x)));
             let query = format!(
